@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>지수부등식 응용(모든 실수에 대해 성립하는 지수부등식)</title>
+  <!-- MathJax 로드 -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+    defer
+  ></script>
+  <style>
+    body {
+      background-color: #fff;
+      color: #000;
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    #gameContainer {
+      margin-top: 20px;
+    }
+    .hidden {
+      display: none;
+    }
+    .energy-bar-container {
+      width: 300px;
+      height: 20px;
+      background-color: #ccc;
+      margin: 10px 0;
+      position: relative;
+    }
+    .energy-bar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 20px;
+      background-color: #000;
+      width: 100%;
+      transition: width 0.2s;
+    }
+    .question-box {
+      border: 1px solid #000;
+      padding: 10px;
+      margin: 10px 0;
+    }
+    .choice-button {
+      display: block;
+      text-align: left;
+      margin: 5px 0;
+      background-color: #f8f8f8;
+      border: 1px solid #000;
+      padding: 5px 10px;
+      cursor: pointer;
+      width: 100%;
+    }
+    .choice-button:hover {
+      background-color: #ddd;
+    }
+    #lives, #score, #difficultyDisplay, #globalTime {
+      margin: 5px 0;
+      font-weight: bold;
+    }
+    #response {
+      margin-top: 10px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+<h1>지수부등식 응용(모든 실수에 대해 성립하는 지수부등식)</h1>
+
+<!-- 이름 입력, 난이도 선택 -->
+<div id="startScreen">
+  <div>
+    <label>이름: 
+      <input type="text" id="playerName" />
+    </label>
+  </div>
+  <p>난이도를 선택하세요.</p>
+  <button onclick="selectDifficulty('최상')">최상 (20초 시작, 문제당 20점)</button>
+  <button onclick="selectDifficulty('상')">상 (30초 시작, 문제당 15점)</button>
+  <button onclick="selectDifficulty('중')">중 (40초 시작, 문제당 13점)</button>
+  <button onclick="selectDifficulty('하')">하 (시간 제한 없음, 문제당 10점)</button>
+</div>
+
+<!-- 게임 화면 -->
+<div id="gameContainer" class="hidden">
+  <div id="difficultyDisplay"></div>
+  <div id="globalTime">총 경과 시간: 0초</div>
+  <div id="lives">남은 기회: 3</div>
+  <div id="score">점수: 0</div>
+  <div class="energy-bar-container" id="energyBarContainer">
+    <div class="energy-bar" id="energyBar"></div>
+  </div>
+
+  <div id="questionArea" class="question-box"></div>
+  <div id="choicesArea"></div>
+  
+  <div id="feedback"></div>
+</div>
+
+<!-- 게임 종료 후 점수 전송 화면 -->
+<div id="endScreen" class="hidden">
+  <h2>게임이 종료되었습니다.</h2>
+  <div>최종 점수: <span id="finalScore"></span></div>
+  <div>총 경과 시간: <span id="finalTime"></span>초</div>
+  <button onclick="sendScore()">점수전송</button>
+  <div id="response"></div>
+</div>
+
+<script>
+  /********************************
+   *   문제 데이터 ( #76, #77 제외 )
+   ********************************/
+  // 각 문제는 {question: "...", choices: ["...","...","...","..."], correct: n} 구조
+  // 정답을 맞추면 correct 인덱스와 비교
+  // 보기 순서도 매번 셔플
+  // 문제는 65,66,67,68,69,70,71,72,73,74,75,78,79,80 (총 14개)
+  // (여기서는 무작위 순서로 넣지 않고, 코드에서 shuffle)
+
+  var allProblems = [
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(4^{x} + 2^{x+1} + 1 \\ge k(2^{2x} -1)\\) 가 항상 성립한다. 이를 만족하는 모든 \\(k\\)의 범위를 \\(\\alpha \\le k \\le \\beta\\)라 할 때, \\(\\alpha + \\beta\\)의 값은?",
+      choices: [
+        "\\(\\alpha + \\beta = -2\\)",
+        "\\(\\alpha + \\beta = -1\\)",
+        "\\(\\alpha + \\beta = 0\\)",
+        "\\(\\alpha + \\beta = 1\\)"
+      ],
+      correct: 2, // 0-based index, 정답은 3번째 보기가 index=2
+      answerDescription: "정답: 3번째 (\\(0\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(\\bigl(\\tfrac14\\bigr)^x - \\bigl(\\tfrac12\\bigr)^{x-2} + 2k > 0\\) 가 항상 성립하도록 하는 실수 \\(k\\)의 범위는?",
+      choices: [
+        "\\(k > 2\\)",
+        "\\(k < -2\\)",
+        "\\(-2 \\le k \\le 2\\)",
+        "\\(k \\ge 2\\)"
+      ],
+      correct: 0, 
+      answerDescription: "정답: 1번째 (\\(k>2\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(4^x - k \\cdot 2^{x+2} + 3 \\ge 0\\)가 항상 성립. 이때 실수 \\(k\\)의 범위는?",
+      choices: [
+        "\\(k \\ge \\tfrac{\\sqrt{3}}{2}\\)",
+        "\\(k \\le \\tfrac{\\sqrt{3}}{2}\\)",
+        "\\(-\\tfrac{\\sqrt{3}}{2} \\le k \\le \\tfrac{\\sqrt{3}}{2}\\)",
+        "위 범위는 존재하지 않음"
+      ],
+      correct: 1,
+      answerDescription: "정답: 2번째 (\\(k \\le \\frac{\\sqrt{3}}{2}\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(2^{2x} - 2^{x+1} + k -1 \\ge 0\\) 가 항상 성립하도록 할 때, \\(k\\)의 최솟값은?",
+      choices: [
+        "\\(k \\le 2\\)",
+        "\\(k = 2\\)",
+        "\\(k \\ge 2\\)",
+        "\\(어떤\\ k\\ 도 불가능\\)"
+      ],
+      correct: 2,
+      answerDescription: "정답: 3번째 (\\(k \\ge 2\\))."
+    },
+    {
+      question: "공기가 어떤 공기 정화 필터 1개를 통과하면 오염 물질이 \\(50\\%\\)씩 줄어든다고 한다. 처음 오염 물질의 양을 1이라 할 때, \\(n\\)개 필터를 연속 통과한 뒤 오염 물질의 양이 \\(\\dfrac{1}{128}\\) 이하가 되려면 최소 몇 개의 필터를 거쳐야 하는가?",
+      choices: [
+        "\\(n=6\\)",
+        "\\(n=7\\)",
+        "\\(n=8\\)",
+        "불가능"
+      ],
+      correct: 1,
+      answerDescription: "정답: 2번째 (\\(n=7\\))."
+    },
+    {
+      question: "어느 자동차 회사에서 영업사원을 \\(x\\)명 두었을 때 판매 실적이 \\(y = c x^k + 2k -1\\) (\\(c\\)는 상수) 라고 하자. 영업사원 수를 50% 늘렸더니 실적이 2.25배 증가하였다. 이때 양의 실수 \\(k\\)는?",
+      choices: [
+        "\\(k=1\\)",
+        "\\(k=2\\)",
+        "\\(k=3\\)",
+        "어떤 양의 \\(k\\)도 불가능"
+      ],
+      correct: 1,
+      answerDescription: "정답: 2번째 (\\(k=2\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(k\\cdot 3^x \\le 9^x - 3^x + 9\\) 가 항상 성립하도록 할 때, \\(k\\)의 최대값은?",
+      choices: [
+        "\\(k \\le 5\\)",
+        "\\(k < 5\\)",
+        "\\(k \\ge 5\\)",
+        "어떤 \\(k\\)도 제한 없음"
+      ],
+      correct: 0,
+      answerDescription: "정답: 1번째 (\\(k\\le 5\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(4^x - 2^{x+4} + k \\ge 0\\) 가 항상 성립하도록 하는 \\(k\\)의 최솟값은?",
+      choices: [
+        "\\(k \\ge 64\\)",
+        "\\(k = 64\\)",
+        "\\(k \\le 64\\)",
+        "어떤 \\(k\\)도 만족 불가"
+      ],
+      correct: 0,
+      answerDescription: "정답: 1번째 (\\(k\\ge64\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(4^{x+1} - 2^{x+2} \\ge k\\) 가 항상 성립하도록 할 때, \\(k\\)의 범위는?",
+      choices: [
+        "\\(k \\le -1\\)",
+        "\\(k \\ge -1\\)",
+        "\\(-1 < k < 1\\)",
+        "불가능"
+      ],
+      correct: 0,
+      answerDescription: "정답: 1번째 (\\(k\\le -1\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(\\bigl(\\tfrac{1}{9}\\bigr)^x + 4\\bigl(\\tfrac{1}{3}\\bigr)^x + k -1 \\ge 0\\) 가 항상 성립하도록 할 때, \\(k\\)의 최솟값은?",
+      choices: [
+        "\\(k \\le 1\\)",
+        "\\(k \\ge 1\\)",
+        "\\(-1 \\le k \\le 1\\)",
+        "만족 불가"
+      ],
+      correct: 1,
+      answerDescription: "정답: 2번째 (\\(k\\ge1\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(2^{x+1} - 2^{\\frac{x+4}{2}} + a \\ge 0\\) 가 항상 성립하도록 하는 실수 \\(a\\)의 최솟값은?",
+      choices: [
+        "\\(a \\le 2\\)",
+        "\\(a = 2\\)",
+        "\\(a \\ge 2\\)",
+        "만족 불가"
+      ],
+      correct: 2,
+      answerDescription: "정답: 3번째 (\\(a\\ge2\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(9^x - 2\\cdot3^{x+1} + k -1 > 0\\) 가 항상 성립하도록 하는 실수 \\(k\\)의 범위는?",
+      choices: [
+        "\\(k \\ge 10\\)",
+        "\\(k > 10\\)",
+        "\\(-10 \\le k \\le 10\\)",
+        "어떤 \\(k\\)도 존재하지 않음"
+      ],
+      correct: 1,
+      answerDescription: "정답: 2번째 (\\(k>10\\))."
+    },
+    {
+      question: "두 배양기에 A 박테리아 2마리, B 박테리아 1마리를 넣었더니 \\(n\\)시간 후 A는 \\(2^n\\)배, B는 \\(8^n\\)배로 늘어난다고 한다. \\(n\\)시간 뒤 두 배양기 박테리아 수 합이 72 이상이면 최소 몇 시간이 지난 것인가?",
+      choices: [
+        "\\(n=1\\)",
+        "\\(n=2\\)",
+        "\\(n=3\\)",
+        "\\(n=4\\)"
+      ],
+      correct: 1,
+      answerDescription: "정답: 2번째 (\\(n=2\\))."
+    },
+    {
+      question: "모든 실수 \\(x\\)에 대하여 \\(4^x - k\\cdot 2^{x+2} \\ge -4\\) 가 항상 성립. 이를 \\(4^x - k\\cdot2^{x+2} +4 \\ge 0\\)로 바꾸어 생각할 때, \\(k\\)의 범위는?",
+      choices: [
+        "\\(k \\ge 1\\)",
+        "\\(k \\le 1\\)",
+        "\\(-1 \\le k \\le 1\\)",
+        "범위 없음"
+      ],
+      correct: 1,
+      answerDescription: "정답: 2번째 (\\(k\\le1\\))."
+    }
+  ];
+
+  // 전역 변수들
+  var currentProblemsOrder = [];  // 처음에 14문제를 섞어 담고, 모두 소진하면 다시 무작위 공급
+  var currentIndex = 0; // 현재 문제 index
+  var score = 0;
+  var lives = 3;
+  var difficulty = ""; 
+  var timeLimit = 0; // 각 문제 제한 시간 (초)
+  var pointsPerQuestion = 0; 
+  var timerInterval = null; 
+  var energyInterval = null; 
+  var timeLeft = 0; // 현재 문제 남은 시간(초) 
+  var globalTime = 0; // 전체 경과 시간
+  var globalTimerInterval = null; 
+  var gameOver = false;
+
+  // 난이도 설정
+  function selectDifficulty(diff) {
+    difficulty = diff;
+    document.getElementById("startScreen").classList.add("hidden");
+    document.getElementById("gameContainer").classList.remove("hidden");
+    document.getElementById("difficultyDisplay").innerText = "난이도: " + diff;
+
+    if (diff === "최상") {
+      timeLimit = 20;
+      pointsPerQuestion = 20;
+    } else if (diff === "상") {
+      timeLimit = 30;
+      pointsPerQuestion = 15;
+    } else if (diff === "중") {
+      timeLimit = 40;
+      pointsPerQuestion = 13;
+    } else { // 하
+      timeLimit = 999999; // 사실상 무제한
+      pointsPerQuestion = 10;
+    }
+
+    // 전체 게임시간 타이머 시작
+    globalTimerInterval = setInterval(()=>{
+      if(!gameOver){
+        globalTime++;
+        document.getElementById("globalTime").innerText = "총 경과 시간: " + globalTime + "초";
+      }
+    }, 1000);
+
+    startGame();
+  }
+
+  function startGame() {
+    score = 0;
+    lives = 3;
+    gameOver = false;
+    document.getElementById("score").innerText = "점수: " + score;
+    document.getElementById("lives").innerText = "남은 기회: " + lives;
+    
+    // 문제들을 섞어서 new array 만들기
+    shuffleArray(allProblems);
+    currentProblemsOrder = allProblems.slice(); 
+    currentIndex = 0;
+    showNextProblem();
+  }
+
+  // 문제 표시
+  function showNextProblem() {
+    if (lives <= 0) {
+      endGame();
+      return;
+    }
+
+    if(currentIndex >= currentProblemsOrder.length){
+      // 한 세트(14문제) 끝났으면 계속 랜덤으로 공급
+      // (문제 요청 때마다 무작위로 한 문제 뽑는다고 해석)
+      // 여기서는 다시 셔플 후 index=0
+      shuffleArray(allProblems);
+      currentProblemsOrder = allProblems.slice();
+      currentIndex = 0;
+    }
+
+    var p = currentProblemsOrder[currentIndex];
+
+    // 보기도 섞기
+    var originalChoices = p.choices.map((c,i)=>({text:c, index:i}));
+    shuffleArray(originalChoices);
+
+    // 화면에 출력
+    var questionArea = document.getElementById("questionArea");
+    questionArea.innerHTML = "<div>" + p.question + "</div>";
+
+    var choicesArea = document.getElementById("choicesArea");
+    choicesArea.innerHTML = "";
+
+    // 각 보기 버튼 생성
+    originalChoices.forEach(function(item){
+      var btn = document.createElement("button");
+      btn.className = "choice-button";
+      btn.innerHTML = item.text;
+      btn.onclick = function(){
+        checkAnswer(item.index);
+      };
+      choicesArea.appendChild(btn);
+    });
+
+    // 정답 체크용:
+    // p.correct => 실제 correct index, 
+    // originalChoices[x].index => 섞인 index
+
+    // 피드백 초기화
+    document.getElementById("feedback").innerText = "";
+
+    // MathJax 렌더링
+    MathJax.typeset();
+
+    // 타이머 설정
+    clearInterval(timerInterval);
+    clearInterval(energyInterval);
+    timeLeft = timeLimit;
+
+    if(difficulty==="하"){
+      // 시간 제한 없음 -> 에너지바 숨김
+      document.getElementById("energyBarContainer").style.display = "none";
+    } else {
+      document.getElementById("energyBarContainer").style.display = "block";
+      updateEnergyBar(); 
+      timerInterval = setInterval(()=>{
+        timeLeft--;
+        if(timeLeft<=0){
+          // 시간 초과 -> 오답 처리와 동일(기회 1 감소 + 정답 보여주고 다음문제)
+          timeLeft=0;
+          clearInterval(timerInterval);
+          showTimeoutFeedback();
+          setTimeout(()=>{
+            loseLifeAndContinue();
+          }, 1500);
+        }
+        updateEnergyBar();
+      },1000);
+    }
+  }
+
+  // 정답 확인
+  function checkAnswer(selectedIndex){
+    var p = currentProblemsOrder[currentIndex];
+    var isCorrect = (selectedIndex===p.correct);
+    if(isCorrect){
+      // 정답
+      score += pointsPerQuestion;
+      document.getElementById("score").innerText = "점수: " + score;
+      document.getElementById("feedback").innerText = "정답입니다!";
+    } else {
+      // 오답
+      lives--;
+      document.getElementById("lives").innerText = "남은 기회: " + lives;
+      document.getElementById("feedback").innerText 
+        = "틀렸습니다. 정답: " + p.answerDescription;
+    }
+
+    // 타이머 정지
+    clearInterval(timerInterval);
+
+    // 1.5초후 다음문제
+    setTimeout(()=>{
+      if(lives<=0){
+        endGame();
+      } else {
+        currentIndex++;
+        showNextProblem();
+      }
+    },1500);
+  }
+
+  // 시간 초과 시 표시
+  function showTimeoutFeedback(){
+    var p = currentProblemsOrder[currentIndex];
+    document.getElementById("feedback").innerText 
+      = "시간 초과! 정답: " + p.answerDescription;
+  }
+
+  function loseLifeAndContinue(){
+    lives--;
+    document.getElementById("lives").innerText = "남은 기회: " + lives;
+    if(lives<=0){
+      endGame();
+    } else {
+      currentIndex++;
+      showNextProblem();
+    }
+  }
+
+  function updateEnergyBar(){
+    var bar = document.getElementById("energyBar");
+    if(timeLimit===0){
+      bar.style.width = "100%";
+    } else {
+      var percent = (timeLeft/timeLimit)*100;
+      bar.style.width = percent + "%";
+    }
+  }
+
+  function endGame(){
+    gameOver=true;
+    clearInterval(timerInterval);
+    clearInterval(globalTimerInterval);
+    document.getElementById("gameContainer").classList.add("hidden");
+    document.getElementById("endScreen").classList.remove("hidden");
+    document.getElementById("finalScore").innerText = score;
+    document.getElementById("finalTime").innerText = globalTime;
+  }
+
+  // shuffleArray 함수
+  function shuffleArray(arr){
+    for(var i=arr.length-1; i>0; i--){
+      var j = Math.floor(Math.random()*(i+1));
+      var temp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = temp;
+    }
+  }
+
+  // 점수 전송
+  function sendScore(){
+    var name = document.getElementById("playerName").value;
+    var game = "지수부등식 응용(모든 실수에 대해 성립하는 지수부등식)";
+    var elapsedTime = globalTime;
+    saveData(game, name, score, elapsedTime);
+  }
+
+  /****************************************************
+   *  서버 전송 함수
+   ****************************************************/
+  async function saveData(game, name, score, elapsedTime) {
+    const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+    const requestData = {
+      game,
+      name,
+      score: parseInt(score, 10),
+      elapsedTime: parseInt(elapsedTime, 10)
+    };
+
+    try {
+      const response = await fetch(FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      const responseData = await response.json();
+
+      if (response.ok) {
+        document.getElementById('response').innerText = 
+          "성공: " + JSON.stringify(responseData, null, 2);
+      } else {
+        document.getElementById('response').innerText = 
+          "오류: " + JSON.stringify(responseData, null, 2);
+      }
+    } catch (error) {
+      console.error('요청 실패:', error);
+      document.getElementById('response').innerText = 
+        "네트워크 오류: " + error.message;
+    }
+  }
+</script>
+</body>
+</html>
